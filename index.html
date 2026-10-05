@@ -1,0 +1,56 @@
+<!doctype html><html lang="ru"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827"><meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest"><title>Распив — учёт</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f5f6f8;color:#111827;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
+header{padding:16px;position:sticky;top:0;background:#f5f6f8ee;backdrop-filter:blur(10px);z-index:3;border-bottom:1px solid #e5e7eb}h1{margin:0;font-size:22px}.muted,.small{color:#6b7280;font-size:12px}
+main{max-width:720px;margin:auto;padding:14px 14px 90px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:14px;margin-bottom:10px}
+.stat b{display:block;font-size:22px;margin-top:4px}.actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
+button{border:0;border-radius:11px;padding:11px 9px;background:#111827;color:white;font-weight:700}button.secondary{background:#eef0f3;color:#111827}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #e5e7eb;display:grid;grid-template-columns:repeat(4,1fr);z-index:5}nav button{border-radius:0;background:#fff;color:#6b7280;font-size:12px}nav button.active{color:#111827}
+.view{display:none}.view.active{display:block}.row{display:flex;justify-content:space-between;gap:10px;align-items:center}.item{display:flex;gap:12px;align-items:center}.thumb{width:64px;height:64px;border-radius:12px;object-fit:cover;background:#eef0f3;flex:none}
+h3{margin:0 0 3px;font-size:16px}.pill{background:#eef0f3;border-radius:99px;padding:4px 7px;font-size:11px}.green{color:#15803d}.empty{text-align:center;padding:25px;color:#6b7280}
+.modal{display:none;position:fixed;inset:0;background:#0008;z-index:10;align-items:flex-end}.modal.open{display:flex}.sheet{background:#fff;width:100%;max-height:92vh;overflow:auto;border-radius:20px 20px 0 0;padding:18px 16px 28px}
+.close{float:right;background:#eef0f3;color:#111827;padding:7px 10px}label{display:block;color:#6b7280;font-size:12px;margin-top:10px}input,select{width:100%;padding:12px;border:1px solid #d1d5db;border-radius:11px;font-size:16px;margin-top:5px}.two{display:grid;grid-template-columns:1fr 1fr;gap:9px}.preview{width:100%;max-height:220px;object-fit:contain;border-radius:12px;margin-top:8px;display:none;background:#f3f4f6}
+</style></head><body>
+<header><h1>РАСПИВ</h1><div class="muted">Продажи · остатки · прибыль</div></header><main>
+<section id="home" class="view active"><div class="grid">
+<div class="card stat"><span class="small">Выручка</span><b id="rev">0 ₽</b></div><div class="card stat"><span class="small">Прибыль</span><b id="profit">0 ₽</b></div>
+<div class="card stat"><span class="small">Продано</span><b id="ml">0 мл</b></div><div class="card stat"><span class="small">Флаконов</span><b id="bcount">0</b></div></div>
+<div class="actions"><button onclick="sale('decant')">＋ Распив</button><button onclick="sale('bottle')">＋ Флакон</button><button onclick="bottleForm()">＋ Закупка</button></div>
+<div class="card"><b>Последние продажи</b><div id="recent"></div></div></section>
+<section id="sales" class="view"><div class="card"><div class="row"><b>Продажи</b><span class="small" id="cnt"></span></div><div id="salesList"></div></div></section>
+<section id="stock" class="view"><div class="card"><div class="row"><b>Остатки</b><button onclick="bottleForm()">＋ Флакон</button></div><div id="stockList"></div></div></section>
+<section id="more" class="view"><div class="card"><b>Резервная копия</b><p class="small">Учёт хранится на этом устройстве. Экспортируй JSON перед очисткой браузера.</p><button onclick="exportData()">Экспорт</button> <button class="secondary" onclick="document.getElementById('imp').click()">Импорт</button><input id="imp" type="file" accept="application/json" style="display:none" onchange="importData(this.files[0])"></div>
+<div class="card"><b>Возможности MVP</b><p class="small">Фото из камеры/галереи · распив 3/5/10 мл · продажа остатка флакона целиком · себестоимость · комиссия · прибыль · остаток в мл.</p></div></section></main>
+<nav><button class="active" onclick="show('home',this)">⌂<br>Главная</button><button onclick="show('sales',this)">₽<br>Продажи</button><button onclick="show('stock',this)">◫<br>Остатки</button><button onclick="show('more',this)">•••<br>Ещё</button></nav>
+<div id="modal" class="modal"><div id="sheet" class="sheet"></div></div>
+<script>
+const K='raspiv_mvp';let db=JSON.parse(localStorage.getItem(K)||'{"bottles":[],"sales":[]}');
+const $=id=>document.getElementById(id),money=n=>Math.round(n||0).toLocaleString('ru-RU')+' ₽';
+function save(){localStorage.setItem(K,JSON.stringify(db));render()}function esc(s){return String(s||'').replace(/[&<>"]/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[x]))}
+function show(id,btn){document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));$(id).classList.add('active');document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));(btn||document.querySelector('nav button')).classList.add('active');render()}
+function close(){ $('modal').classList.remove('open') }
+function preview(i,p){if(!i.files[0])return;let r=new FileReader();r.onload=()=>{$(p).src=r.result;$(p).style.display='block'};r.readAsDataURL(i.files[0])}
+function photo(id){return new Promise(r=>{let f=$(id)?.files?.[0];if(!f)return r('');let x=new FileReader();x.onload=()=>r(x.result);x.readAsDataURL(f)})}
+function bottleForm(){$('sheet').innerHTML=`<button class="close" onclick="close()">✕</button><h2>Новый флакон</h2>
+<label>Аромат<input id="bn" placeholder="Ganymede"></label><div class="two"><label>Объём, мл<input id="bv" type="number" value="100"></label><label>Закупка, ₽<input id="bc" type="number" value="16000"></label></div>
+<label>Фото флакона<input id="bp" type="file" accept="image/*" capture="environment" onchange="preview(this,'bprev')"></label><img id="bprev" class="preview">
+<button style="width:100%;margin-top:14px" onclick="addBottle()">Сохранить</button>`;$('modal').classList.add('open')}
+async function addBottle(){let name=$('bn').value.trim(),v=+$('bv').value,c=+$('bc').value;if(!name||!v||!c)return alert('Заполни данные');let p=await photo('bp');db.bottles.push({id:crypto.randomUUID(),name,initial:v,remaining:v,cost:c,photo:p});close();save()}
+function sale(type,id){let opts=db.bottles.filter(b=>b.remaining>0).map(b=>`<option value="${b.id}">${esc(b.name)} — ${b.remaining} мл</option>`).join('');if(!opts)return alert('Сначала добавь флакон');
+$('sheet').innerHTML=`<button class="close" onclick="close()">✕</button><h2>${type==='decant'?'Продажа распива':'Продажа остатка флакона'}</h2>
+<label>Флакон<select id="sb">${opts}</select></label>${type==='decant'?'<label>Распив<select id="sv"><option>3</option><option>5</option><option>10</option></select></label>':'<label>Весь остаток, мл<input id="sv" type="number" readonly></label>'}
+<label>Цена продажи, ₽<input id="sp" type="number" placeholder="1300"></label><div class="two"><label>Комиссия, %<input id="sc" type="number" value="6"></label><label>Упаковка, ₽<input id="pk" type="number" value="${type==='decant'?85:0}"></label></div>
+<label>Фото продажи<input id="sph" type="file" accept="image/*" capture="environment" onchange="preview(this,'sprev')"></label><img id="sprev" class="preview"><button style="width:100%;margin-top:14px" onclick="addSale('${type}')">Продать</button>`;
+$('modal').classList.add('open');let s=$('sb');if(id)s.value=id;function upd(){if(type==='bottle')$('sv').value=db.bottles.find(b=>b.id===s.value)?.remaining||0}s.onchange=upd;upd()}
+async function addSale(type){let b=db.bottles.find(x=>x.id===$('sb').value),ml=+$('sv').value,price=+$('sp').value,cm=+$('sc').value||0,pk=+$('pk').value||0;if(!b||!price||ml<=0||ml>b.remaining)return alert('Проверь объём и цену');
+let pc=b.cost/b.initial*ml,commission=price*cm/100,p=price-pc-commission-pk,ph=await photo('sph');b.remaining-=ml;db.sales.unshift({date:Date.now(),name:b.name,ml,price,perfumeCost:pc,commission,pack:pk,profit:p,type,photo:ph});close();save()}
+function card(s){return `<div class="card" style="padding:10px;margin:8px 0"><div class="item">${s.photo?`<img class="thumb" src="${s.photo}">`:'<div class="thumb"></div>'}<div><b>${esc(s.name)} · ${s.ml} мл</b><div class="small">${s.type==='bottle'?'Продажа остатка флакона':'Распив'} · ${money(s.price)} · ${new Date(s.date).toLocaleDateString('ru-RU')}</div><div class="small">Парфюм ${money(s.perfumeCost)} · комиссия ${money(s.commission)} · упаковка ${money(s.pack)}</div><b class="green">Прибыль +${money(s.profit)}</b></div></div></div>`}
+function render(){let r=db.sales.reduce((a,s)=>a+s.price,0),p=db.sales.reduce((a,s)=>a+s.profit,0),m=db.sales.reduce((a,s)=>a+s.ml,0);$('rev').textContent=money(r);$('profit').textContent=money(p);$('ml').textContent=m+' мл';$('bcount').textContent=db.bottles.filter(b=>b.remaining>0).length;$('recent').innerHTML=db.sales.slice(0,4).map(card).join('')||'<div class="empty">Продаж пока нет</div>';$('cnt').textContent=db.sales.length+' операций';$('salesList').innerHTML=db.sales.map(card).join('')||'<div class="empty">Продаж пока нет</div>';
+$('stockList').innerHTML=db.bottles.map(b=>`<div class="card" style="padding:10px;margin:8px 0"><div class="item">${b.photo?`<img class="thumb" src="${b.photo}">`:'<div class="thumb"></div>'}<div style="flex:1"><b>${esc(b.name)}</b><div class="small">Остаток <b>${b.remaining} мл</b> · стоимость ${money(b.cost/b.initial*b.remaining)}</div><button onclick="sale('decant','${b.id}')">Распив</button> <button class="secondary" onclick="sale('bottle','${b.id}')">Продать флакон</button></div></div></div>`).join('')||'<div class="empty">Флаконов пока нет</div>'}
+function exportData(){let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(db)],{type:'application/json'}));a.download='raspiv-backup.json';a.click()}
+function importData(f){if(!f)return;let r=new FileReader();r.onload=()=>{try{db=JSON.parse(r.result);save();alert('Готово')}catch(e){alert('Ошибка файла')}};r.readAsText(f)}
+render();
+</script></body></html>
